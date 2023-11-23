@@ -1,15 +1,18 @@
-import random
-import sys
 import argparse
 import ipaddress
 import logging
-from scapy.all import srp, sr1
+import random
+import sys
+from scapy.all import srp
 from scapy.layers.inet import IP, ICMP
 from scapy.layers.l2 import Ether, ARP
+from scapy.sendrecv import sr
 
 # configure logging
 logging.getLogger("scapy").setLevel(logging.CRITICAL)
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 
 def get_ip_range(cidr_notation):
@@ -53,17 +56,21 @@ def scan_arp(ip_list):
 def scan_icmp(ip_list):
     # Function to perform an ICMP scan
     logging.info("Starting ICMP scan...")
-    for ip in ip_list:
-        try:
-            # send ICMP request with broadcast MAC and target IP
-            ans = sr1(IP(dst=ip) / ICMP(), timeout=2, verbose=False)
-            if ans:
-                logging.info(f"IP: {ans[IP].src} responded to ICMP")
-            else:
-                logging.info(f"No response from IP: {ip}")
-        except Exception as e:
-            logging.error(f"Error scanning {ip}: {e}")
 
+    # create list of packages to send
+    packets = [IP(dst=ip)/ICMP() for ip in ip_list]
+
+    # Send all packets with a delay between them
+    ans, unans = sr(packets, timeout=2, verbose=False, inter=random.uniform(0.1, 0.5))
+
+    # process responses
+    for sent, received in ans:
+        logging.debug(f"Sent time: {sent.sent_time}, Received time: {received.time}")
+        rtt = received.time - sent.sent_time  # calc round trip time RTT
+        logging.info(f"IP: {received[IP].src} responded to ICMP with a TTL of {received[IP].ttl} and in {rtt:.6f} seconds")  # show rtt in 6 decimal
+
+    for sent in unans:
+        logging.info(f"No response from IP: {sent[IP].dst}")
 
 def main():
     parser = argparse.ArgumentParser(description="LocalNet Scanner")
@@ -88,7 +95,9 @@ def main():
     elif args.icmp:
         scan_icmp(ip_list)
     else:
-        logging.error("No scan type specified. Use -a for ARP scan or -i for ICMP scan.")
+        logging.error(
+            "No scan type specified. Use -a for ARP scan or -i for ICMP scan."
+        )
         sys.exit(1)
 
 
