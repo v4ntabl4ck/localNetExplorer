@@ -14,6 +14,14 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
+def is_valid_cidr(cidr_notation):
+    try:
+        # ValueError if the CIDR notation is incorrect
+        network = ipaddress.ip_network(cidr_notation, strict=False)
+        return True
+    except ValueError as e:
+        logging.error(f"Invalid CIDR notation: {cidr_notation}. Error: {e}")
+
 
 def get_ip_range(cidr_notation):
     try:
@@ -102,6 +110,7 @@ def display_summary(scan_type, ip_list, ans, unans, total_rtt=None):
     if average_rtt is not None:
         logging.info(f"Average Response Time: {average_rtt:.6f} seconds")
 
+
 def main():
     parser = argparse.ArgumentParser(description="LocalNet Scanner")
     parser.add_argument(
@@ -113,6 +122,10 @@ def main():
     )
 
     args = parser.parse_args()
+
+    # validate the IP range
+    if not is_valid_cidr(args.ip_range):
+        sys.exit(1)
 
     try:
         ip_list = get_ip_range(args.ip_range)
