@@ -14,10 +14,11 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
+
 def is_valid_cidr(cidr_notation):
     try:
         # ValueError if the CIDR notation is incorrect
-        network = ipaddress.ip_network(cidr_notation, strict=False)
+        ipaddress.ip_network(cidr_notation, strict=False)
         return True
     except ValueError as e:
         logging.error(f"Invalid CIDR notation: {cidr_notation}. Error: {e}")
@@ -76,7 +77,7 @@ def scan_icmp(ip_list):
     logging.info("Starting ICMP scan...")
 
     # create list of packages to send
-    packets = [IP(dst=ip)/ICMP() for ip in ip_list]
+    packets = [IP(dst=ip) / ICMP() for ip in ip_list]
 
     # init total RTT
     total_rtt = 0
@@ -88,14 +89,17 @@ def scan_icmp(ip_list):
     for sent, received in ans:
         logging.debug(f"Sent time: {sent.sent_time}, Received time: {received.time}")
         rtt = received.time - sent.sent_time  # calc round trip time RTT
-        total_rtt += rtt # Accum RTT
-        logging.info(f"IP: {received[IP].src} responded to ICMP with a TTL of {received[IP].ttl} and in {rtt:.6f} seconds")  # show rtt in 6 decimal
+        total_rtt += rtt  # Accum RTT
+        logging.info(
+            f"IP: {received[IP].src} responded to ICMP with a TTL of {received[IP].ttl} and in {rtt:.6f} seconds"
+        )  # show rtt in 6 decimal
 
     for sent in unans:
         logging.info(f"No response from IP: {sent[IP].dst}")
 
     # Display summary
     display_summary("ICMP", ip_list, ans, unans, total_rtt)
+
 
 def display_summary(scan_type, ip_list, ans, unans, total_rtt=None):
     total_hosts = len(ip_list)
