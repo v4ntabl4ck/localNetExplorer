@@ -27,6 +27,11 @@ def get_ip_range(cidr_notation):
 def scan_arp(ip_list):
     # Function to perform an ARP scan
     logging.info("Starting ARP scan...")
+
+    # hold the results fo all ARP requests
+    all_ans = []
+    all_unans = []
+
     for ip in ip_list:
         try:
             # random delay so scan is not so easy predictable
@@ -39,6 +44,8 @@ def scan_arp(ip_list):
                 verbose=False,
                 inter=req_time,
             )
+            all_ans.extend(ans)
+            all_unans.extend(unans)
             responded = False
             for sent, received in ans:
                 # check if 'received' packet has ARP layer and is an ARP replay
@@ -52,6 +59,9 @@ def scan_arp(ip_list):
         except Exception as e:
             logging.error(f"Error scanning {ip}: {e}")
 
+    # display summary
+    display_summary("ARP", ip_list, all_ans, all_unans)
+
 
 def scan_icmp(ip_list):
     # Function to perform an ICMP scan
@@ -60,6 +70,9 @@ def scan_icmp(ip_list):
     # create list of packages to send
     packets = [IP(dst=ip)/ICMP() for ip in ip_list]
 
+    # init total RTT
+    total_rtt = 0
+
     # Send all packets with a delay between them
     ans, unans = sr(packets, timeout=2, verbose=False, inter=random.uniform(0.1, 0.5))
 
@@ -67,10 +80,27 @@ def scan_icmp(ip_list):
     for sent, received in ans:
         logging.debug(f"Sent time: {sent.sent_time}, Received time: {received.time}")
         rtt = received.time - sent.sent_time  # calc round trip time RTT
+        total_rtt += rtt # Accum RTT
         logging.info(f"IP: {received[IP].src} responded to ICMP with a TTL of {received[IP].ttl} and in {rtt:.6f} seconds")  # show rtt in 6 decimal
 
     for sent in unans:
         logging.info(f"No response from IP: {sent[IP].dst}")
+
+    # Display summary
+    display_summary("ICMP", ip_list, ans, unans, total_rtt)
+
+def display_summary(scan_type, ip_list, ans, unans, total_rtt=None):
+    total_hosts = len(ip_list)
+    responsive_hosts = len(ans)
+    unresponsive_hosts = len(unans)
+    average_rtt = (total_rtt / responsive_hosts) if total_rtt else None
+
+    logging.info(f"Scan Type: {scan_type}")
+    logging.info(f"Total Hosts Scanned: {total_hosts}")
+    logging.info(f"Responsive Hosts: {responsive_hosts}")
+    logging.info(f"Unresponsive Hosts: {unresponsive_hosts}")
+    if average_rtt is not None:
+        logging.info(f"Average Response Time: {average_rtt:.6f} seconds")
 
 def main():
     parser = argparse.ArgumentParser(description="LocalNet Scanner")
