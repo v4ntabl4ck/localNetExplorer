@@ -3,10 +3,13 @@ import sys
 import argparse
 import ipaddress
 import logging
-from scapy.all import srp, IP, ICMP, ARP, Ether, sr1
+from scapy.all import srp, sr1
+from scapy.layers.inet import IP, ICMP
+from scapy.layers.l2 import Ether, ARP
 
-# configure scapy's logger
+# configure logging
 logging.getLogger("scapy").setLevel(logging.CRITICAL)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 def get_ip_range(cidr_notation):
@@ -14,13 +17,13 @@ def get_ip_range(cidr_notation):
         network = ipaddress.ip_network(cidr_notation, strict=False)
         return [str(ip) for ip in network.hosts()]
     except ValueError as e:
-        print(f"Error: {e}")
+        logging.error(f"Error: {e}")
         return []
 
 
 def scan_arp(ip_list):
     # Function to perform an ARP scan
-    print(f"Starting ARP scan...")
+    logging.info("Starting ARP scan...")
     for ip in ip_list:
         try:
             # random delay so scan is not so easy predictable
@@ -39,27 +42,27 @@ def scan_arp(ip_list):
                 if (
                     received.haslayer(ARP) and received[ARP].op == 2
                 ):  # ARP reply is op code 2
-                    print(f"IP: {received.psrc}, MAC: {received.hwsrc}")
+                    logging.info(f"IP: {received.psrc}, MAC: {received.hwsrc}")
                     responded = True
             if not responded:
-                print(f"No valid ARP response received fro IP: {ip}")
+                logging.info(f"No valid ARP response received from IP: {ip}")
         except Exception as e:
-            print(f"Error scanning {ip}: {e}")
+            logging.error(f"Error scanning {ip}: {e}")
 
 
 def scan_icmp(ip_list):
     # Function to perform an ICMP scan
-    print(f"Starting ICMP scan...")
+    logging.info("Starting ICMP scan...")
     for ip in ip_list:
         try:
             # send ICMP request with broadcast MAC and target IP
             ans = sr1(IP(dst=ip) / ICMP(), timeout=2, verbose=False)
             if ans:
-                print(f"IP: {ans[IP].src} responded to ICMP")
+                logging.info(f"IP: {ans[IP].src} responded to ICMP")
             else:
-                print(f"No response from IP: {ip}")
+                logging.info(f"No response from IP: {ip}")
         except Exception as e:
-            print(f"Error scanning {ip}: {e}")
+            logging.error(f"Error scanning {ip}: {e}")
 
 
 def main():
@@ -77,7 +80,7 @@ def main():
     try:
         ip_list = get_ip_range(args.ip_range)
     except ValueError as e:
-        print(e)
+        logging.error(e)
         sys.exit(1)
 
     if args.arp:
@@ -85,7 +88,7 @@ def main():
     elif args.icmp:
         scan_icmp(ip_list)
     else:
-        print("No scan type specified. Use -a for ARP scan or -i for ICMP scan.")
+        logging.error("No scan type specified. Use -a for ARP scan or -i for ICMP scan.")
         sys.exit(1)
 
 
