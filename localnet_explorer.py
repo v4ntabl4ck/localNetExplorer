@@ -33,72 +33,49 @@ def get_ip_range(cidr_notation):
         return []
 
 
-def scan_arp(ip_list):
+def scan_arp(ip_list, random_delay=False):
     # Function to perform an ARP scan
     logging.info("Starting ARP scan...")
 
-    # hold the results fo all ARP requests
-    all_ans = []
-    all_unans = []
+    # create ARP request for all IPs in the List
+    arp_request = [Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=ip) for ip in ip_list]
 
-    for ip in ip_list:
-        try:
-            # random delay so scan is not so easy predictable
-            req_time = random.uniform(0.1, 0.5)
+    # set delay between request if random_delay is True
+    delay = random.uniform(0.1, 0.5) if random_delay else 0
 
-            # send ARP request with broadcast MAC and target IP
-            ans, unans = srp(
-                Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=ip),
-                timeout=2,
-                verbose=False,
-                inter=req_time,
-            )
-            all_ans.extend(ans)
-            all_unans.extend(unans)
-            responded = False
-            for sent, received in ans:
-                # check if 'received' packet has ARP layer and is an ARP replay
-                if (
-                    received.haslayer(ARP) and received[ARP].op == 2
-                ):  # ARP reply is op code 2
-                    logging.info(f"IP: {received.psrc}, MAC: {received.hwsrc}")
-                    responded = True
-            if not responded:
-                logging.info(f"No valid ARP response received from IP: {ip}")
-        except Exception as e:
-            logging.error(f"Error scanning {ip}: {e}")
+    # Send ARP request and receive responses
+    ans, unans = srp(arp_request, timeout=2, verbose=False, inter=delay)
 
-    # display summary
-    display_summary("ARP", ip_list, all_ans, all_unans)
+    # Process received responses
+    for sent, received in ans:
+        # Check if the received packet is an ARP reply
+        if received.haslayer(ARP) and received[ARP].op == 2:
+            logging.info(f"IP: {received.psrc}, MAC: {received.hwsrc}")
+    # Display scan summary
+    display_summary("ARP", ip_list, ans, unans)
 
-
-def scan_icmp(ip_list):
+def scan_icmp(ip_list, random_delay=False):
     # Function to perform an ICMP scan
     logging.info("Starting ICMP scan...")
 
     # create list of packages to send
-    packets = [IP(dst=ip) / ICMP() for ip in ip_list]
+    icmp_requests = [IP(dst=ip) / ICMP() for ip in ip_list]
 
-    # init total RTT
-    total_rtt = 0
+    # set delay between requests if random_delay is True
+    delay = random.uniform(0.1, 0.5) if random_delay else 0
 
-    # Send all packets with a delay between them
-    ans, unans = sr(packets, timeout=2, verbose=False, inter=random.uniform(0.1, 0.5))
+    # send ICPM requests and receive response
+    ans, unans = sr(icmp_requests, timeout=2, verbose=False, inter=delay)
 
-    # process responses
+    # calc total round-trip time (RTT) for all responses
+    total_rtt = sum(received.time - sent.sent_time for sent, received in ans)
+
+    # Process received responses
     for sent, received in ans:
-        logging.debug(f"Sent time: {sent.sent_time}, Received time: {received.time}")
-        rtt = received.time - sent.sent_time  # calc round trip time RTT
-        total_rtt += rtt  # Accum RTT
-        logging.info(
-            f"IP: {received[IP].src} responded to ICMP with a TTL of {received[IP].ttl} and in {rtt:.6f} seconds"
-        )  # show rtt in 6 decimal
+        logging.info(f"IP: {received[IP].src} responded in {received.time - sent.sent_time:.6f}  seconds")
 
-    for sent in unans:
-        logging.info(f"No response from IP: {sent[IP].dst}")
-
-    # Display summary
-    display_summary("ICMP", ip_list, ans, unans, total_rtt)
+    # display scan summary
+    display_summary("ICPM", ip_list, ans, unans, total_rtt)
 
 
 def display_summary(scan_type, ip_list, ans, unans, total_rtt=None):
@@ -124,6 +101,7 @@ def main():
     parser.add_argument(
         "-i", "--icmp", action="store_true", help="Perform an ICMP scan"
     )
+    parser.add_argument("-d", "--delay", action="store_true", help="Add random delay")
 
     args = parser.parse_args()
 
@@ -138,9 +116,9 @@ def main():
         sys.exit(1)
 
     if args.arp:
-        scan_arp(ip_list)
+        scan_arp(ip_list, args.delay)
     elif args.icmp:
-        scan_icmp(ip_list)
+        scan_icmp(ip_list, args.delay)
     else:
         logging.error(
             "No scan type specified. Use -a for ARP scan or -i for ICMP scan."
